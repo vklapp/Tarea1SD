@@ -15,7 +15,6 @@ import (
 
 var db *sql.DB
 
-// Entidades
 type Driver struct {
 	DriverNumber int    `json:"driver_number"`
 	FirstName    string `json:"first_name"`
@@ -65,7 +64,6 @@ func main() {
 	cargarDatosDesdeOpenF1()
 	r := gin.Default()
 
-	// Endpoints
 	r.GET("/api/corredor", getDrivers)
 	r.GET("/api/corredor/detalle/:id", getDriverDetail)
 	r.GET("/api/carrera", getCarreras)
@@ -75,7 +73,6 @@ func main() {
 	r.Run(":8080")
 }
 
-// ---------------- ENDPOINTS ----------------
 
 func getDrivers(c *gin.Context) {
 	rows, _ := db.Query("SELECT driver_number, first_name, last_name, name_acronym, team_name, country_code FROM drivers")
@@ -168,7 +165,6 @@ func getCarreraDetail(c *gin.Context) {
 	id := c.Param("id")
 	sessionID := id
 
-	// Resultados de la carrera
 	rows, _ := db.Query(`
 		SELECT p.position, d.first_name || ' ' || d.last_name, d.team_name, d.country_code
 		FROM positions p
@@ -194,7 +190,6 @@ func getCarreraDetail(c *gin.Context) {
 		}
 		ultimo = dato
 	}
-	// Vuelta rápida
 	lapRow := db.QueryRow(`
 		SELECT d.first_name || ' ' || d.last_name, l.lap_duration, l.duration_sector_1, l.duration_sector_2, l.duration_sector_3
 		FROM laps l
@@ -207,7 +202,6 @@ func getCarreraDetail(c *gin.Context) {
 	var total, s1, s2, s3 float64
 	lapRow.Scan(&piloto, &total, &s1, &s2, &s3)
 
-	// Velocidad máxima
 	speedRow := db.QueryRow(`
 		SELECT d.first_name || ' ' || d.last_name, MAX(l.st_speed)
 		FROM laps l
@@ -236,7 +230,7 @@ func getCarreraDetail(c *gin.Context) {
 }
 
 func getResumenTemporada(c *gin.Context) {
-	// Victorias
+
 	victorias := make(map[string]int)
 	rows, _ := db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM positions p JOIN drivers d ON p.driver_number = d.driver_number WHERE p.position = 1 GROUP BY d.driver_number")
 	for rows.Next() {
@@ -246,7 +240,7 @@ func getResumenTemporada(c *gin.Context) {
 		victorias[nombre] = count
 	}
 
-	// Vueltas rápidas
+
 	vueltasRapidas := make(map[string]int)
 	rows, _ = db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM laps l JOIN drivers d ON d.driver_number = l.driver_number WHERE l.lap_duration = (SELECT MIN(l2.lap_duration) FROM laps l2 WHERE l2.session_key = l.session_key) GROUP BY d.driver_number")
 	for rows.Next() {
@@ -256,7 +250,7 @@ func getResumenTemporada(c *gin.Context) {
 		vueltasRapidas[nombre] = count
 	}
 
-	// Pole positions (simplificado como posición = 1 en primera fecha)
+
 	poles := make(map[string]int)
 	rows, _ = db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM positions p JOIN drivers d ON p.driver_number = d.driver_number WHERE p.position = 1 GROUP BY p.driver_number")
 	for rows.Next() {
@@ -266,7 +260,7 @@ func getResumenTemporada(c *gin.Context) {
 		poles[nombre] = count
 	}
 
-	// Convertir y ordenar
+
 	type Stat struct {
 		Position int    `json:"position"`
 		Driver   string `json:"driver"`
@@ -296,7 +290,6 @@ func getResumenTemporada(c *gin.Context) {
 	})
 }
 
-// ---------- CARGA DE DATOS DESDE OPENF1 -----------
 
 func cargarDatosDesdeOpenF1() {
 	log.Println("Cargando datos desde OpenF1...")
@@ -461,7 +454,6 @@ func cargarVueltas() {
 	}
 }
 
-// Utilidad para verificar si un número está en una lista
 func contains(slice []int, val int) bool {
 	for _, v := range slice {
 		if v == val {
