@@ -90,13 +90,27 @@ func getDriverDetail(c *gin.Context) {
 	id := c.Param("id")
 	driverID := id
 	rows, _ := db.Query(`
-		SELECT s.session_key, s.circuit_short_name, s.session_name, p.position, MAX(l.st_speed), MIN(l.lap_duration)
-		FROM positions p
-		JOIN sessions s ON p.session_key = s.session_key
-		JOIN laps l ON l.session_key = p.session_key AND l.driver_number = p.driver_number
-		WHERE p.driver_number = ?
-		GROUP BY s.session_key
-	`, driverID)
+	SELECT 
+		s.session_key, 
+		s.circuit_short_name, 
+		s.session_name, 
+		p.position, 
+		MAX(l.st_speed), 
+		MIN(CASE 
+			WHEN l.lap_duration > 0 
+			  AND l.duration_sector_1 > 0 
+			  AND l.duration_sector_2 > 0 
+			  AND l.duration_sector_3 > 0 
+			THEN l.lap_duration 
+			ELSE NULL 
+		END)
+	FROM positions p
+	JOIN sessions s ON p.session_key = s.session_key
+	JOIN laps l ON l.session_key = p.session_key AND l.driver_number = p.driver_number
+	WHERE p.driver_number = ?
+	GROUP BY s.session_key
+`, driverID)
+
 	defer rows.Close()
 
 	type RaceResult struct {
@@ -191,13 +205,18 @@ func getCarreraDetail(c *gin.Context) {
 		ultimo = dato
 	}
 	lapRow := db.QueryRow(`
-		SELECT d.first_name || ' ' || d.last_name, l.lap_duration, l.duration_sector_1, l.duration_sector_2, l.duration_sector_3
-		FROM laps l
-		JOIN drivers d ON d.driver_number = l.driver_number
-		WHERE l.session_key = ?
-		ORDER BY l.lap_duration ASC
-		LIMIT 1
-	`, sessionID)
+	SELECT d.first_name || ' ' || d.last_name, l.lap_duration, l.duration_sector_1, l.duration_sector_2, l.duration_sector_3
+	FROM laps l
+	JOIN drivers d ON d.driver_number = l.driver_number
+	WHERE l.session_key = ?
+	  AND l.lap_duration > 0
+	  AND l.duration_sector_1 > 0
+	  AND l.duration_sector_2 > 0
+	  AND l.duration_sector_3 > 0
+	ORDER BY l.lap_duration ASC
+	LIMIT 1
+`, sessionID)
+
 	var piloto string
 	var total, s1, s2, s3 float64
 	lapRow.Scan(&piloto, &total, &s1, &s2, &s3)
@@ -230,49 +249,34 @@ func getCarreraDetail(c *gin.Context) {
 }
 
 func getResumenTemporada(c *gin.Context) {
-
-	victorias := make(map[string]int)
-	rows, _ := db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM positions p JOIN drivers d ON p.driver_number = d.driver_number WHERE p.position = 1 GROUP BY d.driver_number")
-	for rows.Next() {
-		var nombre string
-		var count int
-		rows.Scan(&nombre, &count)
-		victorias[nombre] = count
-	}
-
-
-	vueltasRapidas := make(map[string]int)
-	rows, _ = db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM laps l JOIN drivers d ON d.driver_number = l.driver_number WHERE l.lap_duration = (SELECT MIN(l2.lap_duration) FROM laps l2 WHERE l2.session_key = l.session_key) GROUP BY d.driver_number")
-	for rows.Next() {
-		var nombre string
-		var count int
-		rows.Scan(&nombre, &count)
-		vueltasRapidas[nombre] = count
-	}
-
-
-	poles := make(map[string]int)
-	rows, _ = db.Query("SELECT d.first_name || ' ' || d.last_name, COUNT(*) FROM positions p JOIN drivers d ON p.driver_number = d.driver_number WHERE p.position = 1 GROUP BY p.driver_number")
-	for rows.Next() {
-		var nombre string
-		var count int
-		rows.Scan(&nombre, &count)
-		poles[nombre] = count
-	}
-
-
 	type Stat struct {
-		Position int    `json:"position"`
-		Driver   string `json:"driver"`
-		Value    int    `json:"wins,omitempty" json:"fastest_laps,omitempty" json:"poles,omitempty"`
+		Position    int    `json:"position"`
+		Driver      string `json:"driver"`
+		Value       int    `json:"Value"`
+		TeamName    string `json:"team_name"`
+		CountryCode string `json:"country_code"`
 	}
 
-	getTop := func(m map[string]int) []Stat {
+	getTop := func(query string) []Stat {
+		rows, _ := db.Query(query)
+		defer rows.Close()
+
 		var stats []Stat
-		for k, v := range m {
-			stats = append(stats, Stat{Driver: k, Value: v})
+		for rows.Next() {
+			var nombre, team, pais string
+			var val int
+			rows.Scan(&nombre, &team, &pais, &val)
+			stats = append(stats, Stat{
+				Driver:      nombre,
+				TeamName:    team,
+				CountryCode: pais,
+				Value:       val,
+			})
 		}
-		sort.Slice(stats, func(i, j int) bool { return stats[i].Value > stats[j].Value })
+
+		sort.Slice(stats, func(i, j int) bool {
+			return stats[i].Value > stats[j].Value
+		})
 		for i := range stats {
 			stats[i].Position = i + 1
 		}
@@ -282,24 +286,45 @@ func getResumenTemporada(c *gin.Context) {
 		return stats
 	}
 
+	victorias := getTop(`
+		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) 
+		FROM positions p 
+		JOIN drivers d ON p.driver_number = d.driver_number 
+		WHERE p.position = 1 
+		GROUP BY d.driver_number`)
+
+	vueltasRapidas := getTop(`
+		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) 
+		FROM laps l 
+		JOIN drivers d ON d.driver_number = l.driver_number 
+		WHERE l.lap_duration = (
+			SELECT MIN(l2.lap_duration) 
+			FROM laps l2 
+			WHERE l2.session_key = l.session_key
+		) 
+		GROUP BY d.driver_number`)
+
+	poles := getTop(`
+		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) 
+		FROM positions p 
+		JOIN drivers d ON p.driver_number = d.driver_number 
+		WHERE p.position = 1 
+		GROUP BY p.driver_number`)
+
 	c.JSON(200, gin.H{
-		"season":             2024,
-		"top_3_winners":      getTop(victorias),
-		"top_3_fastest_laps": getTop(vueltasRapidas),
-		"top_3_pole_positions": getTop(poles),
+		"season":               2024,
+		"top_3_winners":        victorias,
+		"top_3_fastest_laps":   vueltasRapidas,
+		"top_3_pole_positions": poles,
 	})
 }
 
 
 func cargarDatosDesdeOpenF1() {
-	log.Println("Cargando datos desde OpenF1...")
-
 	cargarPilotos()
 	cargarSesiones()
 	cargarPosiciones()
 	cargarVueltas()
-
-	log.Println("Datos cargados correctamente.")
 }
 
 func cargarPilotos() {
@@ -323,15 +348,12 @@ func cargarPilotos() {
 		url := fmt.Sprintf("https://api.openf1.org/v1/drivers?session_key=%d", sessionKey)
 		resp, err := http.Get(url)
 		if err != nil {
-			log.Println("Error al obtener pilotos:", err)
 			continue
 		}
 		defer resp.Body.Close()
 
 		var drivers []Driver
 		if err := json.NewDecoder(resp.Body).Decode(&drivers); err != nil {
-			log.Println("Error decodificando pilotos:", err)
-			continue
 		}
 
 		for _, d := range drivers {
@@ -346,7 +368,6 @@ func cargarSesiones() {
 	url := "https://api.openf1.org/v1/sessions?session_name=Race&year=2024"
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Println("Error al obtener sesiones:", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -364,7 +385,7 @@ func cargarSesiones() {
 
 	var sessions []Session
 	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
-		log.Println("Error decodificando sesiones:", err)
+
 		return
 	}
 
