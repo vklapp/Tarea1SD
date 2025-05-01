@@ -19,4 +19,5 @@ Consideraciones:
   y la base de datos tambien hace referencia a la maquina 10.10.28.59 por lo que no funcionarian si se ocupa el programa en otra maquina.
   
 - Al momento de ejecutar la quinta opcion, la respuesta se demora aproximadamente 58sg.
+- Al elegir la opcion 4 detalle de carrera, se espera que se ingrese una id de carrera valida.
 
