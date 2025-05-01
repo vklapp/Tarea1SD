@@ -172,22 +172,22 @@ func verDetalleCarrera(id string) {
 		row := r.(map[string]interface{})
 		fmt.Printf("| %v | %s | %s | %s |\n", row["position"], row["driver"], row["team"], row["country"])
 	}
-	fmt.Println("--------------------------------------------------------------- \n")
 	fmt.Println("---------------------------------------------------------------")
+
 	fmt.Println("| Vuelta más rápida |")
 	vl := data["fastest_lap"].(map[string]interface{})
 	fmt.Println("---------------------------------------------------------------")
-	fmt.Printf("| Piloto | Tiempo Total| Sector 1 | Sector 2 | Sector 3 |\n")
-	fmt.Println("---------------------------------------------------------------")
-        fmt.Println("| ", vl["driver"], " | ", SaM(vl["total_time"].(float64)), " | ", vl["sector_1"],"s | ", vl["sector_2"], "s | ", vl["sector_3"], "s |")
-	fmt.Println("--------------------------------------------------------------- \n")
-	fmt.Println("---------------------------------------------------------------")
-	fmt.Println("| Velocidad máxima alcanzada |")
+	fmt.Printf("| Piloto: | Total: | Sectores:|\n",
+	vl["driver"],
+	formatTiempo(vl["total_time"].(float64)),
+	vl["sector_1"].(float64),
+	vl["sector_2"].(float64),
+	vl["sector_3"].(float64))
+        fmt.Println("---------------------------------------------------------------")
+
+	fmt.Println("| Velocidad máxima |")
 	vs := data["max_speed"].(map[string]interface{})
-	fmt.Println("---------------------------------------------------------------")
-	fmt.Printf("| Piloto | Velocidad (km/h) |\n")
-	fmt.Println("---------------------------------------------------------------")
-        fmt.Println("| ", vs["driver"]," | ", vs["speed_kmh"]," | ")
+	fmt.Printf("| Piloto: %s | Velocidad: %.1f km/h |\n", vs["driver"], vs["speed_kmh"])
 	fmt.Println("---------------------------------------------------------------")
 }
 
@@ -229,12 +229,6 @@ func Resumen(titulo, clave string, resumen map[string]interface{}) {
 		fmt.Printf("| %-8d | %-16s | %-10s | %-4s | %-15d |\n", pos, nombre, equipo, pais, val)
 	}
 	fmt.Printf("|%s|\n", border)
-}
-
-func SaM(segundos float64) string {
-	min := int(segundos) / 60
-	sec := segundos - float64(min*60)
-	return fmt.Sprintf("%d:%06.3f", min, sec)
 }
 
 func printTop(lista interface{}) {
