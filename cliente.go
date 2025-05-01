@@ -76,18 +76,32 @@ func verCorredores() {
 func verDetalleCorredor(id string) {
 	resp, err := http.Get(baseURL + "/corredor/detalle/" + id)
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error al conectar con el servidor:", err)
 		return
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != 200 {
+		fmt.Println("Error del servidor:", resp.Status)
+		return
+	}
+
 	var data map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&data)
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Println("Error al decodificar la respuesta:", err)
+		return
+	}
+
+	val, ok := data["race_results"]
+	if !ok || val == nil {
+		fmt.Println("No hay resultados disponibles para este piloto.")
+		return
+	}
+	resultados := val.([]interface{})
 
 	fmt.Println("-------------------------------------------------------------------------------------------")
 	fmt.Println("| # | Carrera | Pos Final | Vuelta rápida | Velocidad máx | Menor tiempo vuelta |")
 	fmt.Println("-------------------------------------------------------------------------------------------")
-	resultados := data["race_results"].([]interface{})
 	for i, r := range resultados {
 		row := r.(map[string]interface{})
 		fmt.Printf("| %d | %s | %v | %v | %.0f km/h | %.3f s |\n",
@@ -100,7 +114,13 @@ func verDetalleCorredor(id string) {
 	}
 	fmt.Println("-------------------------------------------------------------------------------------------")
 
-	summary := data["performance_summary"].(map[string]interface{})
+	summaryVal, ok := data["performance_summary"]
+	if !ok || summaryVal == nil {
+		fmt.Println("No hay resumen disponible.")
+		return
+	}
+	summary := summaryVal.(map[string]interface{})
+
 	fmt.Println("-----------------------------------------------")
 	fmt.Println("| Resumen del desempeño del piloto           |")
 	fmt.Println("-----------------------------------------------")
@@ -109,6 +129,7 @@ func verDetalleCorredor(id string) {
 	fmt.Printf("| Velocidad máxima alcanzada: | %.0f km/h |\n", summary["max_speed"].(float64))
 	fmt.Println("-----------------------------------------------")
 }
+
 
 func verCarreras() {
 	resp, err := http.Get(baseURL + "/carrera")
